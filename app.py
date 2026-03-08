@@ -1,4 +1,10 @@
 import streamlit as st
+from openai import OpenAI
+
+client = OpenAI(
+    api_key=st.secrets["OPENROUTER_API_KEY"],
+    base_url="https://openrouter.ai/api/v1"
+)
 import pandas as pd
 from reportlab.pdfgen import canvas
 import urllib.parse
