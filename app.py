@@ -1,86 +1,75 @@
 import streamlit as st
 import pandas as pd
 from reportlab.pdfgen import canvas
-import urllib.parse
 from openai import OpenAI
+import urllib.parse
+import io
 
 # ================================
-# API CLIENT (OpenRouter)
+# PAGE CONFIG
+# ================================
+
+st.set_page_config(
+    page_title="Travel AI Agent Demo",
+    page_icon="✈️",
+    layout="wide"
+)
+
+st.title("✈️ Travel Agency AI Demo")
+st.write("AI assistant that creates itineraries, suggests flights & hotels, and prepares proposals instantly.")
+
+# ================================
+# OPENROUTER CLIENT
 # ================================
 
 client = OpenAI(
-    api_key=st.secrets["OPENROUTER_API_KEY"],
+    api_key="YOUR_OPENROUTER_KEY",
     base_url="https://openrouter.ai/api/v1"
 )
 
 # ================================
-# PAGE SETTINGS
+# DESTINATION DETECTION
 # ================================
 
-st.set_page_config(page_title="AffiNexa Travel AI Demo", layout="wide")
-
-# ================================
-# LOGIN SYSTEM
-# ================================
-
-username = st.sidebar.text_input("Username")
-password = st.sidebar.text_input("Password", type="password")
-
-if username != "demo" or password != "affinexa":
-    st.title("AffiNexa Travel AI Demo")
-    st.info("Enter demo credentials in sidebar to access.")
-    st.stop()
-
-# ================================
-# HEADER
-# ================================
-
-st.title("✈️ AI Travel Assistant")
-st.write(
-    "Paste a travel inquiry and generate itinerary, hotels, flights, and WhatsApp reply."
-)
-
-# ================================
-# DESTINATION IMAGE
-# ================================
-
-def destination_image(text):
+def detect_destination(text):
 
     text = text.lower()
 
     if "goa" in text:
-        return "https://images.unsplash.com/photo-1507525428034-b723cf961d3e"
+        return "Goa"
 
-    if "corbett" in text:
-        return "https://images.unsplash.com/photo-1546182990-dffeafbe841d"
+    elif "dubai" in text:
+        return "Dubai"
 
-    if "manali" in text:
-        return "https://images.unsplash.com/photo-1609947017136-9daf32a5eb16"
+    elif "manali" in text:
+        return "Manali"
 
-    if "dubai" in text:
-        return "https://images.unsplash.com/photo-1512453979798-5ea266f8880c"
+    elif "corbett" in text:
+        return "Jim Corbett"
 
-    return "https://images.unsplash.com/photo-1488646953014-85cb44e25828"
+    else:
+        return "Popular Destination"
+
 
 # ================================
 # AI ITINERARY
 # ================================
 
-def generate_itinerary(text):
+def generate_itinerary(inquiry):
 
     prompt = f"""
-You are a travel planning expert.
+Create a travel itinerary.
 
 Customer inquiry:
-{text}
+{inquiry}
 
-Generate:
+Include:
+Day-wise itinerary
+Hotel suggestions
+Travel tips
+Budget estimate
 
-Destination
-Trip duration
-Day-by-day itinerary
-Estimated trip budget
-Recommended activities
+Keep it clear and structured.
 """
 
     response = client.chat.completions.create(
@@ -90,201 +79,217 @@ Recommended activities
 
     return response.choices[0].message.content
 
-# ================================
-# WHATSAPP REPLY
-# ================================
-
-def whatsapp_reply(text):
-
-    prompt = f"""
-Write a short friendly WhatsApp reply to this travel inquiry:
-
-{text}
-
-Offer itinerary and hotel suggestions.
-"""
-
-    response = client.chat.completions.create(
-        model="openrouter/auto",
-        messages=[{"role": "user", "content": prompt}]
-    )
-
-    return response.choices[0].message.content
 
 # ================================
-# HOTEL DATA
+# FLIGHT OPTIONS
 # ================================
 
-def get_hotels():
+def get_flights(destination):
 
-    hotels = [
-        {
-            "name": "Luxury Resort",
-            "price": "₹7500",
-            "image": "https://images.unsplash.com/photo-1566073771259-6a8506099945"
-        },
-        {
-            "name": "Ocean View Hotel",
-            "price": "₹6200",
-            "image": "https://images.unsplash.com/photo-1551882547-ff40c63fe5fa"
-        },
-        {
-            "name": "Boutique Stay",
-            "price": "₹5400",
-            "image": "https://images.unsplash.com/photo-1520250497591-112f2f40a3f4"
-        }
-    ]
+    if destination == "Goa":
 
-    return hotels
+        flights = [
+            {"route": "Delhi → Goa", "airline": "IndiGo", "price": 6200},
+            {"route": "Mumbai → Goa", "airline": "Air India", "price": 4500},
+            {"route": "Bangalore → Goa", "airline": "SpiceJet", "price": 5200}
+        ]
 
-# ================================
-# FLIGHT ESTIMATE
-# ================================
+    elif destination == "Dubai":
 
-def flight_prices():
+        flights = [
+            {"route": "Delhi → Dubai", "airline": "Emirates", "price": 22000},
+            {"route": "Mumbai → Dubai", "airline": "FlyDubai", "price": 21000},
+            {"route": "Bangalore → Dubai", "airline": "Air India", "price": 24000}
+        ]
 
-    flights = {
-        "Delhi → Goa": "₹6500",
-        "Mumbai → Goa": "₹4500",
-        "Bangalore → Goa": "₹5200",
-        "Delhi → Dubai": "₹22000"
-    }
+    elif destination == "Manali":
+
+        flights = [
+            {"route": "Delhi → Kullu", "airline": "Alliance Air", "price": 6500},
+            {"route": "Mumbai → Kullu", "airline": "IndiGo", "price": 12000},
+            {"route": "Bangalore → Kullu", "airline": "Air India", "price": 15000}
+        ]
+
+    else:
+
+        flights = [
+            {"route": "Delhi → Destination", "airline": "IndiGo", "price": 7000},
+            {"route": "Mumbai → Destination", "airline": "Air India", "price": 6500},
+            {"route": "Bangalore → Destination", "airline": "SpiceJet", "price": 7500}
+        ]
 
     return flights
 
+
 # ================================
-# PDF CREATOR
+# HOTEL SUGGESTIONS
+# ================================
+
+def get_hotels(destination):
+
+    if destination == "Goa":
+
+        hotels = [
+            {"name": "Taj Holiday Village", "price": 8500, "image": "https://images.unsplash.com/photo-1582719508461-905c673771fd"},
+            {"name": "W Goa", "price": 12000, "image": "https://images.unsplash.com/photo-1566073771259-6a8506099945"},
+            {"name": "La Calypso Beach Resort", "price": 6500, "image": "https://images.unsplash.com/photo-1551882547-ff40c63fe5fa"}
+        ]
+
+    elif destination == "Dubai":
+
+        hotels = [
+            {"name": "Atlantis The Palm", "price": 22000, "image": "https://images.unsplash.com/photo-1576675784201-0e142b423952"},
+            {"name": "Burj Al Arab", "price": 45000, "image": "https://images.unsplash.com/photo-1542314831-068cd1dbfeeb"},
+            {"name": "Jumeirah Beach Hotel", "price": 18000, "image": "https://images.unsplash.com/photo-1520250497591-112f2f40a3f4"}
+        ]
+
+    else:
+
+        hotels = [
+            {"name": "Luxury Resort", "price": 7500, "image": "https://images.unsplash.com/photo-1566073771259-6a8506099945"},
+            {"name": "Ocean View Hotel", "price": 6200, "image": "https://images.unsplash.com/photo-1551882547-ff40c63fe5fa"},
+            {"name": "Boutique Stay", "price": 5400, "image": "https://images.unsplash.com/photo-1520250497591-112f2f40a3f4"}
+        ]
+
+    return hotels
+
+
+# ================================
+# PDF GENERATOR
 # ================================
 
 def create_pdf(text):
 
-    file = "itinerary.pdf"
+    buffer = io.BytesIO()
+    pdf = canvas.Canvas(buffer)
 
-    c = canvas.Canvas(file)
-
-    y = 750
-
+    y = 800
     for line in text.split("\n"):
-        c.drawString(50, y, line)
+        pdf.drawString(50, y, line)
         y -= 20
 
-    c.save()
+    pdf.save()
 
-    return file
+    buffer.seek(0)
+    return buffer
+
 
 # ================================
-# CRM SAVE
+# CRM LOGGING
 # ================================
 
-def save_to_crm(inquiry):
+def log_lead(name, inquiry):
 
-    df = pd.DataFrame({"Inquiry":[inquiry]})
+    data = pd.DataFrame([[name, inquiry]], columns=["Name", "Inquiry"])
 
     try:
         old = pd.read_csv("crm.csv")
-        df = pd.concat([old, df])
+        data = pd.concat([old, data])
     except:
         pass
 
-    df.to_csv("crm.csv", index=False)
+    data.to_csv("crm.csv", index=False)
+
 
 # ================================
-# MAIN INPUT
+# USER INPUT
 # ================================
 
-inquiry = st.text_area("Customer Inquiry")
+name = st.text_input("Customer Name")
 
-if inquiry:
-    st.image(destination_image(inquiry))
-
-# ================================
-# GENERATE BUTTON
-# ================================
+inquiry = st.text_area("Customer Travel Inquiry")
 
 if st.button("Generate Travel Plan"):
 
+    destination = detect_destination(inquiry)
+
+    st.success(f"Detected destination: **{destination}**")
+
     itinerary = generate_itinerary(inquiry)
 
-    st.subheader("📅 AI Itinerary")
+    log_lead(name, inquiry)
 
-    st.markdown(
-    f"""
-    <div style="background:#f4f6ff;padding:25px;border-radius:10px">
-    {itinerary}
-    </div>
-    """,
-    unsafe_allow_html=True
-    )
+    st.subheader("🧭 AI Itinerary")
 
+    st.write(itinerary)
+
+    # ========================
+    # FLIGHTS
+    # ========================
+
+    st.subheader("✈️ Flight Options")
+
+    flights = get_flights(destination)
+
+    for flight in flights:
+
+        st.write(f"**{flight['route']}** — {flight['airline']} — ₹{flight['price']}")
+
+    # ========================
     # HOTELS
+    # ========================
 
-    st.subheader("🏨 Suggested Hotels")
+    st.subheader("🏨 Hotel Suggestions")
 
-    hotels = get_hotels()
+    hotels = get_hotels(destination)
 
     cols = st.columns(3)
 
     for i, hotel in enumerate(hotels):
 
         with cols[i]:
-
             st.image(hotel["image"])
-            st.markdown(f"### {hotel['name']}")
-            st.markdown(f"💰 {hotel['price']}")
-            st.markdown("⭐ ⭐ ⭐ ⭐")
+            st.write(f"**{hotel['name']}**")
+            st.write(f"₹{hotel['price']} / night")
 
-    # FLIGHTS
+    # ========================
+    # BUDGET CHART
+    # ========================
 
-    st.subheader("✈️ Estimated Flights")
+    st.subheader("💰 Estimated Trip Budget")
 
-    st.write(flight_prices())
+    avg_flight = sum([f["price"] for f in flights]) / len(flights)
+    avg_hotel = sum([h["price"] for h in hotels]) / len(hotels)
 
+    budget = pd.DataFrame({
+        "Category": ["Flights", "Hotels", "Activities"],
+        "Cost": [avg_flight, avg_hotel*3, 5000]
+    })
+
+    st.bar_chart(budget.set_index("Category"))
+
+    # ========================
     # WHATSAPP MESSAGE
+    # ========================
 
-    st.subheader("💬 WhatsApp Reply")
+    st.subheader("📱 WhatsApp Reply")
 
-    reply = whatsapp_reply(inquiry)
+    msg = f"""
+Hello {name},
 
-    st.markdown(
-    f"""
-    <div style="background:#e9fff1;padding:20px;border-radius:10px">
-    {reply}
-    </div>
-    """,
-    unsafe_allow_html=True
-    )
+Here is your travel proposal for {destination}.
 
-    encoded = urllib.parse.quote(reply)
+Flights starting from ₹{int(avg_flight)}
+Hotels starting from ₹{int(avg_hotel)}
 
-    link = f"https://wa.me/?text={encoded}"
+Let us know if you'd like us to confirm bookings.
 
-    st.link_button("Send via WhatsApp", link)
+Best regards
+Travel Team
+"""
 
+    whatsapp = "https://wa.me/?text=" + urllib.parse.quote(msg)
+
+    st.link_button("Send via WhatsApp", whatsapp)
+
+    # ========================
     # PDF DOWNLOAD
+    # ========================
 
     pdf = create_pdf(itinerary)
 
     st.download_button(
         "Download Itinerary PDF",
-        open(pdf, "rb"),
-        file_name="itinerary.pdf"
+        pdf,
+        file_name="travel_plan.pdf"
     )
-
-    # CRM
-
-    save_to_crm(inquiry)
-
-    st.success("Customer inquiry saved to CRM.")
-
-# ================================
-# COST CHART
-# ================================
-
-budget = pd.DataFrame({
-    "Category":["Flights","Hotels","Activities","Food"],
-    "Cost":[15000,22000,8000,6000]
-})
-
-st.subheader("💸 Trip Cost Breakdown")
-
-st.bar_chart(budget.set_index("Category"))
